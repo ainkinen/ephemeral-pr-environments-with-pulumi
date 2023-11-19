@@ -1,0 +1,88 @@
+name: PR workflow
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      # The other types are defaults for pull_request, but we also want to trigger on closed to destroy the stack.
+      - closed
+permissions:
+  id-token: write  # Get OIDC token
+  contents: read  # Checkout
+  pull-requests: write  # Comment on PR
+env:
+  # Azure auth
+  ARM_USE_OIDC: 'true'
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  # Name and config source of the PR stack
+  PR_STACK_NAME: 'pr-${{ github.event.number }}' # E.g. 'pr-123'
+  PR_STACK_CONFIG_SOURCE: 'dev'
+jobs:
+  Deploy-PR-stack:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.action != 'closed' }} # The stack upsert should run when the PR is created or updated.
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+          cache: 'pip'
+      - name: 'Az CLI login'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Setup stack config
+        # The pulumi/actions "up" doesn't expose the --config-file option.
+        # This copies the source config to a new file that Pulumi will pick up based on the stack name.
+        run: |
+          cd app
+          cp Pulumi.${{ env.PR_STACK_CONFIG_SOURCE }}.yaml Pulumi.${{ env.PR_STACK_NAME }}.yaml
+      - name: Deploy the PR stack
+        uses: pulumi/actions@v4
+        with:
+          work-dir: ./app
+          command: update
+          # Important! Creates a new stack if a matching one doesn't already exist.
+          upsert: true
+          comment-on-pr: true
+          stack-name: ${{ env.PR_STACK_NAME }}
+          # The cloud-url needs to be set when using a self-hosted Pulumi backend.
+          # The value is the same as what would be used with pulumi login.
+          cloud-url: ${{ secrets.PULUMI_BACKEND_URL }}
+        env:
+          # For demo only. Be responsible and use a proper secrets provider.
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+  Tear-down-PR-stack:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.action == 'closed' }} # Tear-down when the PRs are closed.
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+          cache: 'pip'
+      - name: 'Az CLI login'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Destroy the stack
+        uses: pulumi/actions@v4
+        with:
+          work-dir: ./app
+          command: destroy
+          # Important! The stack will also be removed from the backend.
+          remove: true
+          comment-on-pr: true
+          stack-name: ${{ env.PR_STACK_NAME }}
+          cloud-url: ${{ secrets.PULUMI_BACKEND_URL }}
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}

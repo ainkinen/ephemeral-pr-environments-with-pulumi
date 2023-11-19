@@ -1,0 +1,5 @@
+encryptionsalt: v1:AKu9LhGYFY4=:v1:xALl/sIgEdL8QDEZ:Ir7ZNkZP17KdROfOHEniHf1y4BhRMA==
+config:
+  app:shared_container_app_environment_id: /subscriptions/2868d0d9-b3c0-47e7-94a4-43aef40bd0a6/resourceGroups/shared-resources2998cff4/providers/Microsoft.App/managedEnvironments/shared-caece1ef3c0
+  app:shared_resources_group_name: shared-resources2998cff4
+  azure-native:location: WestEurope

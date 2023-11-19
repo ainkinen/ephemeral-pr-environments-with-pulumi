@@ -1,0 +1,6 @@
+name: base-infra
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Shared base infra
